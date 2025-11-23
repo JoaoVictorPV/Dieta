@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { foodDatabase } from '@/lib/mock-data';
 import { Search, Trash2, Edit2, Check, X, Plus } from 'lucide-react';
 import { useUser } from '@/contexts/UserContext';
+import { useToast } from '@/contexts/ToastContext';
 import { format } from 'date-fns';
 
 interface FoodItem {
@@ -30,6 +31,7 @@ interface Targets {
 
 export default function NutritionPage() {
   const { currentUser } = useUser();
+  const { showToast } = useToast();
   const [log, setLog] = useState<LogEntry[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedFood, setSelectedFood] = useState<FoodItem | null>(null);
@@ -77,7 +79,10 @@ export default function NutritionPage() {
   };
 
   const handleCreateFood = () => {
-    if (!newFood.name || !newFood.calories) return alert("Nome e Calorias são obrigatórios");
+    if (!newFood.name || !newFood.calories) {
+      showToast("Nome e Calorias são obrigatórios", 'error');
+      return;
+    }
     
     const food: FoodItem = {
       id: `custom-${Date.now()}`,
@@ -99,6 +104,7 @@ export default function NutritionPage() {
     setShowCreateFood(false);
     setNewFood({ unit_g: 100 });
     setSearchTerm(food.name); // Auto search for it
+    showToast('Alimento criado!');
   };
 
   // Calculate totals

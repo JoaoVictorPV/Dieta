@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { UserProvider } from "@/contexts/UserContext";
+import { ToastProvider } from "@/contexts/ToastContext";
 import AuthWrapper from "@/components/AuthWrapper";
 
 const inter = Inter({ subsets: ["latin"] });
@@ -28,11 +29,13 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body className={`${inter.className} bg-gray-50 text-slate-900 antialiased`}>
-        <UserProvider>
-          <AuthWrapper>
-            {children}
-          </AuthWrapper>
-        </UserProvider>
+        <ToastProvider>
+          <UserProvider>
+            <AuthWrapper>
+              {children}
+            </AuthWrapper>
+          </UserProvider>
+        </ToastProvider>
       </body>
     </html>
   );
