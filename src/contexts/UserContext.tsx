@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useToast } from './ToastContext';
 
 interface UserProfile {
   id: string;
@@ -11,66 +12,100 @@ interface UserProfile {
 interface UserContextType {
   currentUser: UserProfile | null;
   profiles: UserProfile[];
-  login: (profileId: string, pin: string) => boolean;
+  login: (profileId: string, pin: string) => Promise<boolean>;
   logout: () => void;
-  createProfile: (name: string, pin: string) => void;
+  createProfile: (name: string, pin: string) => Promise<void>;
   loading: boolean;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children }: { children: React.ReactNode }) {
+  const { showToast } = useToast();
   const [currentUser, setCurrentUser] = useState<UserProfile | null>(null);
   const [profiles, setProfiles] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Initial Load
   useEffect(() => {
-    // Load profiles from localStorage
-    const savedProfiles = localStorage.getItem('fitprog_profiles');
-    if (savedProfiles) {
-      setProfiles(JSON.parse(savedProfiles));
-    }
-
-    // Check for remembered user
-    const lastUserId = localStorage.getItem('fitprog_last_user');
-    if (lastUserId && savedProfiles) {
-      const parsedProfiles = JSON.parse(savedProfiles);
-      const user = parsedProfiles.find((p: UserProfile) => p.id === lastUserId);
-      if (user) {
-        setCurrentUser(user);
+    const loadProfiles = async () => {
+      try {
+        // In real app, check session cookie/token. Here we just check localStorage for 'remembered' ID
+        // But we fetch profiles from API
+        const res = await fetch('/api/users');
+        if (res.ok) {
+          const data = await res.json();
+          setProfiles(data);
+          
+          // Auto-login if previously remembered
+          const lastUserId = localStorage.getItem('fitprog_last_user_id');
+          if (lastUserId) {
+            const user = data.find((p: any) => p.id === lastUserId);
+            if (user) setCurrentUser(user);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to load profiles", error);
+        showToast("Erro ao carregar perfis", "error");
+      } finally {
+        setLoading(false);
       }
-    }
-    setLoading(false);
+    };
+
+    loadProfiles();
   }, []);
 
-  const login = (profileId: string, pin: string) => {
-    const user = profiles.find(p => p.id === profileId);
-    if (user && user.pin === pin) {
-      setCurrentUser(user);
-      localStorage.setItem('fitprog_last_user', user.id);
-      return true;
+  const login = async (profileId: string, pin: string) => {
+    try {
+      const res = await fetch('/api/users/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: profileId, pin })
+      });
+
+      const data = await res.json();
+      
+      if (data.success) {
+        setCurrentUser(data.user);
+        localStorage.setItem('fitprog_last_user_id', data.user.id);
+        return true;
+      } else {
+        return false;
+      }
+    } catch (error) {
+      console.error("Login error", error);
+      return false;
     }
-    return false;
   };
 
   const logout = () => {
     setCurrentUser(null);
-    localStorage.removeItem('fitprog_last_user');
+    localStorage.removeItem('fitprog_last_user_id');
   };
 
-  const createProfile = (name: string, pin: string) => {
-    const newProfile: UserProfile = {
-      id: Math.random().toString(36).substr(2, 9),
-      name,
-      pin
-    };
-    const updatedProfiles = [...profiles, newProfile];
-    setProfiles(updatedProfiles);
-    localStorage.setItem('fitprog_profiles', JSON.stringify(updatedProfiles));
-    
-    // Auto login on create
-    setCurrentUser(newProfile);
-    localStorage.setItem('fitprog_last_user', newProfile.id);
+  const createProfile = async (name: string, pin: string) => {
+    try {
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, pin })
+      });
+
+      if (res.ok) {
+        const newUser = await res.json();
+        setProfiles(prev => [newUser, ...prev]);
+        
+        // Auto login
+        setCurrentUser(newUser);
+        localStorage.setItem('fitprog_last_user_id', newUser.id);
+        showToast(`Bem-vindo, ${newUser.name}!`);
+      } else {
+        showToast("Erro ao criar perfil", "error");
+      }
+    } catch (error) {
+      console.error("Create profile error", error);
+      showToast("Erro de conexão", "error");
+    }
   };
 
   return (

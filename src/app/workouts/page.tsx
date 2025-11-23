@@ -44,18 +44,24 @@ export default function WorkoutsPage() {
   const [executionState, setExecutionState] = useState<Exercise[]>([]);
   const [caloriesBurned, setCaloriesBurned] = useState('');
 
-  // Load programs
-  useEffect(() => {
-    if (currentUser) {
-      const saved = localStorage.getItem(`fitprog_programs_${currentUser.id}`);
-      if (saved) setPrograms(JSON.parse(saved));
+  // Load programs from API
+  const loadPrograms = async () => {
+    if (!currentUser) return;
+    try {
+      const res = await fetch(`/api/programs?userId=${currentUser.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        setPrograms(data);
+      }
+    } catch (error) {
+      console.error("Error loading programs", error);
+      showToast("Erro ao carregar treinos", "error");
     }
-  }, [currentUser]);
-
-  const saveProgramsToStorage = (newPrograms: Program[]) => {
-    setPrograms(newPrograms);
-    localStorage.setItem(`fitprog_programs_${currentUser?.id}`, JSON.stringify(newPrograms));
   };
+
+  useEffect(() => {
+    loadPrograms();
+  }, [currentUser]);
 
   const handleOpenCreate = () => {
     setIsEditing(false);
@@ -79,16 +85,24 @@ export default function WorkoutsPage() {
     setProgramToDelete(id);
   };
 
-  const handleDeleteProgram = () => {
+  const handleDeleteProgram = async () => {
     if (programToDelete) {
-      const newPrograms = programs.filter(p => p.id !== programToDelete);
-      saveProgramsToStorage(newPrograms);
+      try {
+        const res = await fetch(`/api/programs?id=${programToDelete}`, { method: 'DELETE' });
+        if (res.ok) {
+          setPrograms(programs.filter(p => p.id !== programToDelete));
+          showToast('Treino excluído', 'info');
+        } else {
+          showToast('Erro ao excluir', 'error');
+        }
+      } catch (e) {
+        showToast('Erro de conexão', 'error');
+      }
       setProgramToDelete(null);
-      showToast('Treino excluído', 'info');
     }
   };
 
-  const handleSaveProgram = () => {
+  const handleSaveProgram = async () => {
     if (!programName.trim()) {
       showToast("Nome do treino é obrigatório", 'error');
       return;
@@ -99,22 +113,32 @@ export default function WorkoutsPage() {
       return;
     }
 
-    if (isEditing && editProgramId) {
-      const newPrograms = programs.map(p => 
-        p.id === editProgramId ? { ...p, name: programName, exercises: validExercises } : p
-      );
-      saveProgramsToStorage(newPrograms);
-      showToast('Treino atualizado com sucesso!');
-    } else {
-      const newProgram: Program = {
-        id: Math.random().toString(36).substr(2, 9),
-        name: programName,
-        exercises: validExercises
-      };
-      saveProgramsToStorage([...programs, newProgram]);
-      showToast('Novo treino criado!');
+    try {
+      const payload = { name: programName, exercises: validExercises, userId: currentUser?.id };
+      let res;
+      
+      if (isEditing && editProgramId) {
+        res = await fetch('/api/programs', {
+          method: 'PUT',
+          body: JSON.stringify({ ...payload, id: editProgramId })
+        });
+      } else {
+        res = await fetch('/api/programs', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+      }
+
+      if (res.ok) {
+        showToast(isEditing ? 'Treino atualizado!' : 'Novo treino criado!');
+        loadPrograms(); // Refresh
+        setShowCreateModal(false);
+      } else {
+        showToast("Erro ao salvar", 'error');
+      }
+    } catch (e) {
+      showToast("Erro de conexão", 'error');
     }
-    setShowCreateModal(false);
   };
 
   const handleAddExerciseRow = () => {
@@ -145,26 +169,38 @@ export default function WorkoutsPage() {
     setExecutionState(newExec);
   };
 
-  const finishExecution = () => {
-    if (!activeProgram) return;
+  const finishExecution = async () => {
+    if (!activeProgram || !currentUser) return;
     
     const completedCount = executionState.filter(e => e.completed).length;
     
-    const log: LogEntry = {
-      date: new Date().toISOString(),
+    const log = {
+      userId: currentUser.id,
       programId: activeProgram.id,
       programName: activeProgram.name,
       exercisesCompleted: completedCount,
       totalExercises: activeProgram.exercises.length,
-      caloriesBurned: Number(caloriesBurned) || 0
+      caloriesBurned: Number(caloriesBurned) || 0,
+      date: new Date().toISOString()
     };
     
-    const logs = JSON.parse(localStorage.getItem(`fitprog_logs_${currentUser?.id}`) || '[]');
-    logs.push(log);
-    localStorage.setItem(`fitprog_logs_${currentUser?.id}`, JSON.stringify(logs));
-    
-    showToast("Treino registrado no histórico!");
-    setActiveProgram(null);
+    try {
+      // Save to API (Need to create logs API first, assume /api/logs)
+      // For now I'll implement the API route next.
+      const res = await fetch('/api/logs', {
+        method: 'POST',
+        body: JSON.stringify(log)
+      });
+      
+      if (res.ok) {
+        showToast("Treino registrado no histórico!");
+        setActiveProgram(null);
+      } else {
+        showToast("Erro ao salvar log", "error");
+      }
+    } catch (e) {
+      showToast("Erro de conexão", "error");
+    }
   };
 
   return (

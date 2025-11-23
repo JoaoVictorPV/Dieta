@@ -1,87 +1,98 @@
 -- Enable UUID extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 1. Programs Table
+-- Drop tables if they exist to ensure clean slate with new relations
+DROP TABLE IF EXISTS exercises;
+DROP TABLE IF EXISTS workouts; -- This was from old schema, we might rename or use programs
+DROP TABLE IF EXISTS nutrition_logs;
+DROP TABLE IF EXISTS body_measurements;
+DROP TABLE IF EXISTS programs;
+DROP TABLE IF EXISTS recipes;
+DROP TABLE IF EXISTS foods;
+DROP TABLE IF EXISTS users;
+
+-- 1. Users Table (New!)
+CREATE TABLE IF NOT EXISTS users (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  name VARCHAR(255) NOT NULL,
+  pin VARCHAR(50) NOT NULL, -- Simple PIN/Password
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 2. Programs Table (Linked to User)
 CREATE TABLE IF NOT EXISTS programs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
   description TEXT,
-  start_date DATE,
-  end_date DATE,
-  status VARCHAR(50) DEFAULT 'active', -- active, completed, archived
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 2. Workouts Table (Linked to Programs or standalone)
-CREATE TABLE IF NOT EXISTS workouts (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  program_id UUID REFERENCES programs(id) ON DELETE SET NULL,
-  name VARCHAR(255) NOT NULL, -- e.g., "Leg Day", "Full Body A"
-  description TEXT,
-  scheduled_date DATE NOT NULL,
-  status VARCHAR(50) DEFAULT 'pending', -- pending, completed, skipped
-  calories_burned INTEGER DEFAULT 0,
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
--- 3. Exercises Table (Linked to Workouts)
+-- 3. Exercises Table (Linked to Program)
 CREATE TABLE IF NOT EXISTS exercises (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  workout_id UUID REFERENCES workouts(id) ON DELETE CASCADE,
+  program_id UUID REFERENCES programs(id) ON DELETE CASCADE,
   name VARCHAR(255) NOT NULL,
-  sets INTEGER,
-  reps INTEGER,
-  weight DECIMAL(5,2), -- in kg
   notes TEXT,
-  completed BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 4. Food Database Table (Base foods)
+-- 4. Workout Logs (History of executed programs)
+CREATE TABLE IF NOT EXISTS workout_logs (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  program_id UUID REFERENCES programs(id) ON DELETE SET NULL,
+  program_name VARCHAR(255), -- Keep name even if program deleted
+  date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  exercises_completed INTEGER DEFAULT 0,
+  total_exercises INTEGER DEFAULT 0,
+  calories_burned INTEGER DEFAULT 0
+);
+
+-- 5. Food Database Table (Global + User Custom)
 CREATE TABLE IF NOT EXISTS foods (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE, -- NULL for global foods
   name VARCHAR(255) NOT NULL,
-  unit_g DECIMAL(10,2) DEFAULT 100.00, -- Standard reference amount (usually 100g)
+  unit_g DECIMAL(10,2) DEFAULT 100.00,
   calories DECIMAL(10,2) NOT NULL,
   carbs DECIMAL(10,2) NOT NULL,
   fats DECIMAL(10,2) NOT NULL,
   proteins DECIMAL(10,2) NOT NULL
 );
 
--- 5. Recipes Table
-CREATE TABLE IF NOT EXISTS recipes (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  name VARCHAR(255) NOT NULL,
-  description TEXT,
-  ingredients JSONB, -- Stores array of {food_id, amount_g} or text description
-  total_calories DECIMAL(10,2),
-  total_carbs DECIMAL(10,2),
-  total_fats DECIMAL(10,2),
-  total_proteins DECIMAL(10,2),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-
 -- 6. Nutrition Logs (Daily consumption)
 CREATE TABLE IF NOT EXISTS nutrition_logs (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   log_date DATE NOT NULL,
   food_id UUID REFERENCES foods(id) ON DELETE SET NULL,
-  recipe_id UUID REFERENCES recipes(id) ON DELETE SET NULL,
   amount_g DECIMAL(10,2) NOT NULL,
-  meal_type VARCHAR(50), -- breakfast, lunch, dinner, snack
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- 7. Body Measurements (Impedanciometry)
+-- 7. Nutrition Targets (User specific)
+CREATE TABLE IF NOT EXISTS nutrition_targets (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+  calories INTEGER DEFAULT 2000,
+  carbs INTEGER DEFAULT 250,
+  fats INTEGER DEFAULT 70,
+  proteins INTEGER DEFAULT 100,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- 8. Body Measurements
 CREATE TABLE IF NOT EXISTS body_measurements (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  user_id UUID REFERENCES users(id) ON DELETE CASCADE,
   date DATE NOT NULL,
-  weight DECIMAL(5,2), -- kg
-  body_fat_percent DECIMAL(5,2), -- %
-  muscle_mass_percent DECIMAL(5,2), -- %
-  water_percent DECIMAL(5,2), -- %
+  weight DECIMAL(5,2),
+  body_fat_percent DECIMAL(5,2),
+  muscle_mass_percent DECIMAL(5,2),
+  water_percent DECIMAL(5,2),
   visceral_fat_level INTEGER,
-  basal_metabolic_rate INTEGER, -- kcal
+  basal_metabolic_rate INTEGER,
   metabolic_age INTEGER,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );

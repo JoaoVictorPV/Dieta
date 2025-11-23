@@ -32,6 +32,7 @@ export default function Home() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [mounted, setMounted] = useState(false);
+  const [measurements, setMeasurements] = useState<any[]>([]);
 
   const today = new Date();
   const dateKey = format(today, 'yyyy-MM-dd');
@@ -44,14 +45,22 @@ export default function Home() {
   useEffect(() => {
     setMounted(true);
     if (currentUser) {
-      // Load Calories
+      // Load Calories (This can still be localStorage for daily ephemeral, or API. Let's keep localStorage for simplicity of this slider)
       const savedCal = localStorage.getItem(`fitprog_calories_${currentUser.id}_${dateKey}`);
       if (savedCal) setCalorieProgress(parseInt(savedCal));
       else setCalorieProgress(0);
 
-      // Load Logs
-      const savedLogs = localStorage.getItem(`fitprog_logs_${currentUser.id}`);
-      if (savedLogs) setLogs(JSON.parse(savedLogs));
+      // Load Logs from API
+      fetch(`/api/logs?userId=${currentUser.id}`)
+        .then(res => res.json())
+        .then(data => setLogs(Array.isArray(data) ? data : []))
+        .catch(err => console.error(err));
+
+      // Load Measurements from API
+      fetch(`/api/measurements?userId=${currentUser.id}`)
+        .then(res => res.json())
+        .then(data => setMeasurements(Array.isArray(data) ? data : []))
+        .catch(err => console.error(err));
     }
   }, [currentUser, dateKey]);
 
@@ -69,6 +78,10 @@ export default function Home() {
   };
 
   const selectedLogs = getLogsForDate(selectedDate);
+
+  // Calculate weight trend
+  const currentWeight = measurements.length > 0 ? measurements[measurements.length - 1].weight : 0;
+  const bodyFat = measurements.length > 0 ? measurements[measurements.length - 1].body_fat_percent : 0;
 
   if (!mounted) return null;
 
@@ -206,22 +219,22 @@ export default function Home() {
       <section className="grid grid-cols-2 gap-4">
         <InfoCard title="Peso Atual">
           <div className="flex items-end gap-1">
-            <span className="text-3xl font-black text-slate-900">78.5</span>
+            <span className="text-3xl font-black text-slate-900">{currentWeight > 0 ? currentWeight : '--'}</span>
             <span className="text-sm font-bold text-slate-500 mb-1">kg</span>
           </div>
           <div className="flex items-center gap-1 text-green-600 mt-2 font-bold text-xs">
             <TrendingUp size={14} />
-            <span>-1.2kg (30d)</span>
+            <span>Registro mais recente</span>
           </div>
         </InfoCard>
         <InfoCard title="Gordura Corporal">
           <div className="flex items-end gap-1">
-            <span className="text-3xl font-black text-slate-900">18.2</span>
+            <span className="text-3xl font-black text-slate-900">{bodyFat > 0 ? bodyFat : '--'}</span>
             <span className="text-sm font-bold text-slate-500 mb-1">%</span>
           </div>
           <div className="flex items-center gap-1 text-slate-400 mt-2 font-bold text-xs">
             <Scale size={14} />
-            <span>Estável</span>
+            <span>Registro mais recente</span>
           </div>
         </InfoCard>
       </section>
