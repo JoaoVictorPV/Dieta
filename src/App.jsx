@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import { supabase } from './lib/supabase';
+import { Login } from './components/Login';
 import { 
   Plus, 
   Trash2, 
@@ -9,7 +11,8 @@ import {
   Activity,
   Flame,
   Settings2,
-  Pencil
+  Pencil,
+  LogOut
 } from 'lucide-react';
 import { 
   format, 
@@ -28,17 +31,12 @@ import { ptBR } from 'date-fns/locale';
 import { cn } from './lib/utils';
 
 function App() {
-  // Lista de Exercícios Cadastrados
-  const [exercises, setExercises] = useState(() => {
-    const saved = localStorage.getItem('exercises');
-    return saved ? JSON.parse(saved) : [];
-  });
+  const [session, setSession] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Histórico de Realizações
-  const [history, setHistory] = useState(() => {
-    const saved = localStorage.getItem('exercise_history');
-    return saved ? JSON.parse(saved) : {};
-  });
+  // Dados
+  const [exercises, setExercises] = useState([]);
+  const [history, setHistory] = useState({}); // { "YYYY-MM-DD": { exerciseId: { id, calories } } }
 
   // Estados de Interface
   const [currentMonth, setCurrentMonth] = useState(new Date());
@@ -47,11 +45,9 @@ function App() {
   const [isManageModalOpen, setIsManageModalOpen] = useState(false);
   const [newExerciseTitle, setNewExerciseTitle] = useState('');
   
-  // Estado para edição
   const [editingExerciseId, setEditingExerciseId] = useState(null);
   const [editingTitle, setEditingTitle] = useState('');
 
-  // Estado para o modal de calorias
   const [caloryModal, setCaloryModal] = useState({ 
     isOpen: false, 
     exerciseId: null, 
@@ -59,46 +55,99 @@ function App() {
   });
   const [caloriesInput, setCaloriesInput] = useState('');
 
-  // Persistência
+  // Gerenciar Sessão
   useEffect(() => {
-    localStorage.setItem('exercises', JSON.stringify(exercises));
-  }, [exercises]);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setLoading(false);
+    });
 
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Carregar Dados
   useEffect(() => {
-    localStorage.setItem('exercise_history', JSON.stringify(history));
-  }, [history]);
+    if (session) {
+      fetchData();
+    }
+  }, [session]);
+
+  const fetchData = async () => {
+    // Carregar Exercícios
+    const { data: exercisesData } = await supabase
+      .from('exercises')
+      .select('*')
+      .order('created_at');
+    
+    if (exercisesData) setExercises(exercisesData);
+
+    // Carregar Histórico
+    const { data: historyData } = await supabase
+      .from('history')
+      .select('*');
+
+    if (historyData) {
+      const historyMap = {};
+      historyData.forEach(record => {
+        const dateKey = record.date; // YYYY-MM-DD
+        if (!historyMap[dateKey]) historyMap[dateKey] = {};
+        historyMap[dateKey][record.exercise_id] = {
+          id: record.id, // ID do registro no histórico para deletar depois
+          calories: record.calories
+        };
+      });
+      setHistory(historyMap);
+    }
+  };
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+  };
 
   // Adicionar exercício
-  const addExercise = (e) => {
+  const addExercise = async (e) => {
     e.preventDefault();
     if (!newExerciseTitle.trim()) return;
 
-    const newExercise = {
-      id: crypto.randomUUID(),
-      title: newExerciseTitle.trim(),
-      createdAt: new Date().toISOString(),
-    };
+    const { data, error } = await supabase
+      .from('exercises')
+      .insert([{ 
+        title: newExerciseTitle.trim(),
+        user_id: session.user.id
+      }])
+      .select();
 
-    setExercises([...exercises, newExercise]);
-    setNewExerciseTitle('');
-    setIsAddModalOpen(false);
+    if (data) {
+      setExercises([...exercises, data[0]]);
+      setNewExerciseTitle('');
+      setIsAddModalOpen(false);
+    }
   };
 
-  // Remover exercício (sem confirmação)
-  const deleteExercise = (exerciseId) => {
+  // Remover exercício
+  const deleteExercise = async (exerciseId) => {
+    await supabase.from('exercises').delete().eq('id', exerciseId);
     setExercises(exercises.filter(h => h.id !== exerciseId));
   };
 
-  // Iniciar edição
+  // Editar exercício
   const startEditing = (exercise) => {
     setEditingExerciseId(exercise.id);
     setEditingTitle(exercise.title);
   };
 
-  // Salvar edição
-  const saveEditing = () => {
+  const saveEditing = async () => {
     if (!editingTitle.trim()) return;
     
+    await supabase
+      .from('exercises')
+      .update({ title: editingTitle.trim() })
+      .eq('id', editingExerciseId);
+
     setExercises(exercises.map(ex => 
       ex.id === editingExerciseId ? { ...ex, title: editingTitle.trim() } : ex
     ));
@@ -106,54 +155,82 @@ function App() {
     setEditingTitle('');
   };
 
-  // Check / Uncheck
-  const handleCheck = (exerciseId, date) => {
+  // Check / Uncheck (Lógica principal)
+  const handleCheck = async (exerciseId, date) => {
     const dateKey = format(date, 'yyyy-MM-dd');
     const dayData = history[dateKey] || {};
+    const record = dayData[exerciseId];
     
-    if (dayData[exerciseId]) {
+    if (record) {
+      // Remover (Uncheck)
+      await supabase.from('history').delete().eq('id', record.id);
+      
       const newDayData = { ...dayData };
       delete newDayData[exerciseId];
       setHistory({
         ...history,
         [dateKey]: newDayData
       });
-      return;
+    } else {
+      // Adicionar (Check) -> Abre modal
+      setCaloriesInput('');
+      setCaloryModal({
+        isOpen: true,
+        exerciseId,
+        dateKey
+      });
     }
-
-    setCaloriesInput('');
-    setCaloryModal({
-      isOpen: true,
-      exerciseId,
-      dateKey
-    });
   };
 
-  // Confirmar calorias
-  const confirmCheck = (e) => {
+  // Confirmar inserção no histórico
+  const confirmCheck = async (e) => {
     e.preventDefault();
     const { exerciseId, dateKey } = caloryModal;
-    const dayData = history[dateKey] || {};
     
-    setHistory({
-      ...history,
-      [dateKey]: {
-        ...dayData,
-        [exerciseId]: {
-          calories: caloriesInput ? Number(caloriesInput) : null
+    const { data, error } = await supabase
+      .from('history')
+      .insert([{
+        user_id: session.user.id,
+        exercise_id: exerciseId,
+        date: dateKey,
+        calories: caloriesInput ? Number(caloriesInput) : null
+      }])
+      .select();
+
+    if (data) {
+      const dayData = history[dateKey] || {};
+      setHistory({
+        ...history,
+        [dateKey]: {
+          ...dayData,
+          [exerciseId]: {
+            id: data[0].id,
+            calories: data[0].calories
+          }
         }
-      }
-    });
+      });
+    }
 
     setCaloryModal({ isOpen: false, exerciseId: null, dateKey: null });
   };
 
-  // Helpers
   const getDailyCalories = (date) => {
     const dateKey = format(date, 'yyyy-MM-dd');
     const dayData = history[dateKey] || {};
     return Object.values(dayData).reduce((acc, curr) => acc + (curr.calories || 0), 0);
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Activity className="animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  if (!session) {
+    return <Login />;
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans selection:bg-primary/20">
@@ -171,17 +248,24 @@ function App() {
           </div>
           
           <div className="flex gap-2">
+             <button
+              onClick={handleLogout}
+              className="p-2 rounded-lg hover:bg-secondary text-muted-foreground hover:text-destructive transition-all"
+              title="Sair"
+            >
+              <LogOut size={20} />
+            </button>
             <button
               onClick={() => setIsManageModalOpen(true)}
               className="p-2 rounded-lg bg-secondary hover:bg-secondary/80 text-muted-foreground hover:text-foreground transition-all"
-              aria-label="Gerenciar exercícios"
+              title="Gerenciar Lista"
             >
               <Settings2 size={20} />
             </button>
             <button
               onClick={() => setIsAddModalOpen(true)}
               className="p-2 rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground transition-all shadow-sm hover:shadow-md active:scale-95"
-              aria-label="Adicionar exercício"
+              title="Novo Exercício"
             >
               <Plus size={20} />
             </button>
@@ -265,7 +349,7 @@ function App() {
         </div>
       </div>
 
-      {/* Modal do Dia (Checklist) */}
+      {/* Modal do Dia */}
       {selectedDate && (
         <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-end sm:items-center justify-center sm:p-4 z-40 animate-in fade-in duration-200">
           <div className="bg-card w-full max-w-lg sm:rounded-2xl border-t sm:border border-border shadow-2xl h-[85vh] sm:h-auto flex flex-col animate-in slide-in-from-bottom-10 duration-300">
@@ -352,7 +436,7 @@ function App() {
         </div>
       )}
 
-      {/* Modal de Gerenciar Exercícios */}
+      {/* Modal de Gerenciar */}
       {isManageModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
           <div className="bg-card w-full max-w-md rounded-xl p-6 shadow-xl border border-border flex flex-col max-h-[80vh] animate-in zoom-in-95 duration-200">
