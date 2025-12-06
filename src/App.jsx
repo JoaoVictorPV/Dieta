@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from './lib/supabase';
 import { Login } from './components/Login';
 import { 
@@ -56,9 +56,9 @@ function App() {
   const [caloriesInput, setCaloriesInput] = useState('');
 
   // Navegação por Gesto (Touch/Mouse)
-  const [touchStart, setTouchStart] = useState(null);
-  const [touchEnd, setTouchEnd] = useState(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const touchStart = useRef(null);
+  const touchEnd = useRef(null);
+  const isDragging = useRef(false);
   const minSwipeDistance = 50;
 
   // Gerenciar Sessão
@@ -234,43 +234,43 @@ function App() {
 
   // Handlers de Navegação Gestual
   const onTouchStart = (e) => {
-    setTouchEnd(null);
-    setTouchStart(e.targetTouches[0].clientX);
+    touchEnd.current = null;
+    touchStart.current = e.targetTouches[0].clientX;
   };
 
   const onTouchMove = (e) => {
-    setTouchEnd(e.targetTouches[0].clientX);
+    touchEnd.current = e.targetTouches[0].clientX;
   };
 
   const onTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
-    const distance = touchStart - touchEnd;
+    if (!touchStart.current || !touchEnd.current) return;
+    const distance = touchStart.current - touchEnd.current;
     handleSwipe(distance);
   };
 
   const onMouseDown = (e) => {
-    setIsDragging(true);
-    setTouchEnd(null);
-    setTouchStart(e.clientX);
+    isDragging.current = true;
+    touchEnd.current = null;
+    touchStart.current = e.clientX;
   };
 
   const onMouseMove = (e) => {
-    if (!isDragging) return;
-    setTouchEnd(e.clientX);
+    if (!isDragging.current) return;
+    touchEnd.current = e.clientX;
   };
 
   const onMouseUp = () => {
-    if (!isDragging) return;
-    setIsDragging(false);
-    if (!touchStart || !touchEnd) return;
-    const distance = touchStart - touchEnd;
+    if (!isDragging.current) return;
+    isDragging.current = false;
+    if (!touchStart.current || !touchEnd.current) return;
+    const distance = touchStart.current - touchEnd.current;
     handleSwipe(distance);
   };
 
   const onMouseLeave = () => {
-    setIsDragging(false);
-    setTouchStart(null);
-    setTouchEnd(null);
+    isDragging.current = false;
+    touchStart.current = null;
+    touchEnd.current = null;
   };
 
   const handleSwipe = (distance) => {
