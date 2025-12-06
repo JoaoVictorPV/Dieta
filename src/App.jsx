@@ -56,9 +56,11 @@ function App() {
   const [caloriesInput, setCaloriesInput] = useState('');
 
   // Navegação por Gesto (Touch/Mouse)
-  const [touchStart, setTouchStart] = useState(null);
-  const [touchEnd, setTouchEnd] = useState(null);
-  const [isDragging, setIsDragging] = useState(false);
+  const calendarRef = useRef(null);
+  const touchStart = useRef(null);
+  const touchEnd = useRef(null);
+  const isDragging = useRef(false);
+  const [isTouching, setIsTouching] = useState(false); // Apenas para feedback visual
   const minSwipeDistance = 30;
 
   // Gerenciar Sessão
@@ -232,62 +234,84 @@ function App() {
     return Object.values(dayData).reduce((acc, curr) => acc + (curr.calories || 0), 0);
   };
 
-  // Handlers de Navegação Gestual
-  const onTouchStart = (e) => {
-    setTouchEnd(null);
-    setTouchStart(e.targetTouches[0].clientX);
-  };
+  // Listeners Nativos para Touch (Mais robusto para iPhone)
+  useEffect(() => {
+    const el = calendarRef.current;
+    if (!el) return;
 
-  const onTouchMove = (e) => {
-    setTouchEnd(e.targetTouches[0].clientX);
-  };
+    const handleTouchStart = (e) => {
+      touchEnd.current = null;
+      touchStart.current = e.touches[0].clientX;
+      setIsTouching(true);
+    };
 
-  const onTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
-    const distance = touchStart - touchEnd;
-    handleSwipe(distance);
-    setTouchStart(null);
-    setTouchEnd(null);
-  };
+    const handleTouchMove = (e) => {
+      touchEnd.current = e.touches[0].clientX;
+    };
 
+    const handleTouchEnd = () => {
+      setIsTouching(false);
+      if (!touchStart.current || !touchEnd.current) return;
+      
+      const distance = touchStart.current - touchEnd.current;
+      
+      if (distance > minSwipeDistance) {
+        setCurrentMonth(prev => addMonths(prev, 1));
+      } else if (distance < -minSwipeDistance) {
+        setCurrentMonth(prev => subMonths(prev, 1));
+      }
+      
+      touchStart.current = null;
+      touchEnd.current = null;
+    };
+
+    // Adiciona listeners com passive: true para permitir scroll vertical suave
+    el.addEventListener('touchstart', handleTouchStart, { passive: true });
+    el.addEventListener('touchmove', handleTouchMove, { passive: true });
+    el.addEventListener('touchend', handleTouchEnd);
+
+    return () => {
+      el.removeEventListener('touchstart', handleTouchStart);
+      el.removeEventListener('touchmove', handleTouchMove);
+      el.removeEventListener('touchend', handleTouchEnd);
+    };
+  }, []);
+
+  // Handlers Mouse (Desktop) - Mantidos via React Props
   const onMouseDown = (e) => {
-    setTouchEnd(null);
-    setTouchStart(e.clientX);
-    setIsDragging(true);
+    isDragging.current = true;
+    touchEnd.current = null;
+    touchStart.current = e.clientX;
+    setIsTouching(true);
   };
 
   const onMouseMove = (e) => {
-    if (isDragging) {
-      setTouchEnd(e.clientX);
-    }
+    if (!isDragging.current) return;
+    touchEnd.current = e.clientX;
   };
 
   const onMouseUp = () => {
-    if (!isDragging) return;
-    setIsDragging(false);
-    if (touchStart && touchEnd) {
-      const distance = touchStart - touchEnd;
-      handleSwipe(distance);
+    if (!isDragging.current) return;
+    isDragging.current = false;
+    setIsTouching(false);
+    
+    if (touchStart.current && touchEnd.current) {
+      const distance = touchStart.current - touchEnd.current;
+      if (distance > minSwipeDistance) {
+        setCurrentMonth(prev => addMonths(prev, 1));
+      } else if (distance < -minSwipeDistance) {
+        setCurrentMonth(prev => subMonths(prev, 1));
+      }
     }
-    setTouchStart(null);
-    setTouchEnd(null);
+    touchStart.current = null;
+    touchEnd.current = null;
   };
 
   const onMouseLeave = () => {
-    if (isDragging) {
-      setIsDragging(false);
-      setTouchStart(null);
-      setTouchEnd(null);
-    }
-  };
-
-  const handleSwipe = (distance) => {
-    if (distance > minSwipeDistance) {
-      setCurrentMonth(prev => addMonths(prev, 1));
-    }
-    if (distance < -minSwipeDistance) {
-      setCurrentMonth(prev => subMonths(prev, 1));
-    }
+    isDragging.current = false;
+    touchStart.current = null;
+    touchEnd.current = null;
+    setIsTouching(false);
   };
 
   if (loading) {
@@ -343,13 +367,12 @@ function App() {
         </header>
 
         <div 
+          ref={calendarRef}
+          style={{ touchAction: 'pan-y' }}
           className={cn(
-            "space-y-4 touch-pan-y select-none rounded-xl transition-colors p-2 -m-2",
-            (touchStart !== null || isDragging) ? "bg-primary/5" : ""
+            "space-y-4 select-none rounded-xl transition-colors p-2 -m-2",
+            isTouching ? "bg-primary/10 ring-2 ring-primary/20" : ""
           )}
-          onTouchStart={onTouchStart}
-          onTouchMove={onTouchMove}
-          onTouchEnd={onTouchEnd}
           onMouseDown={onMouseDown}
           onMouseMove={onMouseMove}
           onMouseUp={onMouseUp}
