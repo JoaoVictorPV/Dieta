@@ -55,13 +55,59 @@ function App() {
   });
   const [caloriesInput, setCaloriesInput] = useState('');
 
-  // Navegação por Gesto (Touch/Mouse)
-  const calendarRef = useRef(null);
-  const touchStart = useRef(null);
-  const touchEnd = useRef(null);
-  const isDragging = useRef(false);
-  const [isTouching, setIsTouching] = useState(false); // Apenas para feedback visual
-  const minSwipeDistance = 30;
+  // --- Lógica de Swipe Unificada (Touch & Mouse) ---
+  const [touchStart, setTouchStart] = useState(null);
+  const [touchEnd, setTouchEnd] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const minSwipeDistance = 50;
+
+  const onTouchStart = (e) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const onTouchMove = (e) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    handleSwipe(distance);
+  };
+
+  const onMouseDown = (e) => {
+    setIsDragging(true);
+    setTouchEnd(null);
+    setTouchStart(e.clientX);
+  };
+
+  const onMouseMove = (e) => {
+    if (!isDragging) return;
+    setTouchEnd(e.clientX);
+  };
+
+  const onMouseUp = () => {
+    if (!isDragging) return;
+    setIsDragging(false);
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    handleSwipe(distance);
+  };
+
+  const onMouseLeave = () => {
+    setIsDragging(false);
+    setTouchStart(null);
+    setTouchEnd(null);
+  };
+
+  const handleSwipe = (distance) => {
+    if (distance > minSwipeDistance) {
+      setCurrentMonth(prev => addMonths(prev, 1));
+    } else if (distance < -minSwipeDistance) {
+      setCurrentMonth(prev => subMonths(prev, 1));
+    }
+  };
 
   // Gerenciar Sessão
   useEffect(() => {
@@ -234,89 +280,6 @@ function App() {
     return Object.values(dayData).reduce((acc, curr) => acc + (curr.calories || 0), 0);
   };
 
-  // Listeners Nativos para Touch (Mais robusto para iPhone)
-  useEffect(() => {
-    const el = calendarRef.current;
-    if (!el) return;
-
-    const handleTouchStart = (e) => {
-      touchEnd.current = null;
-      touchStart.current = e.touches[0].clientX;
-      setIsTouching(true);
-    };
-
-    const handleTouchMove = (e) => {
-      touchEnd.current = e.touches[0].clientX;
-    };
-
-    const handleTouchEnd = () => {
-      setIsTouching(false);
-      if (!touchStart.current || !touchEnd.current) return;
-      
-      const distance = touchStart.current - touchEnd.current;
-      
-      if (distance > minSwipeDistance) {
-        setCurrentMonth(prev => addMonths(prev, 1));
-      } else if (distance < -minSwipeDistance) {
-        setCurrentMonth(prev => subMonths(prev, 1));
-      }
-      
-      touchStart.current = null;
-      touchEnd.current = null;
-    };
-
-    // Adiciona listeners com passive: true para permitir scroll vertical suave
-    el.addEventListener('touchstart', handleTouchStart, { passive: true });
-    el.addEventListener('touchmove', handleTouchMove, { passive: true });
-    el.addEventListener('touchend', handleTouchEnd);
-    
-    // DEBUG: Confirmação de carregamento
-    // alert("Calendário Pronto"); // Comentado para não incomodar se não for debug
-
-    return () => {
-      el.removeEventListener('touchstart', handleTouchStart);
-      el.removeEventListener('touchmove', handleTouchMove);
-      el.removeEventListener('touchend', handleTouchEnd);
-    };
-  }, [loading]);
-
-  // Handlers Mouse (Desktop) - Mantidos via React Props
-  const onMouseDown = (e) => {
-    isDragging.current = true;
-    touchEnd.current = null;
-    touchStart.current = e.clientX;
-    setIsTouching(true);
-  };
-
-  const onMouseMove = (e) => {
-    if (!isDragging.current) return;
-    touchEnd.current = e.clientX;
-  };
-
-  const onMouseUp = () => {
-    if (!isDragging.current) return;
-    isDragging.current = false;
-    setIsTouching(false);
-    
-    if (touchStart.current && touchEnd.current) {
-      const distance = touchStart.current - touchEnd.current;
-      if (distance > minSwipeDistance) {
-        setCurrentMonth(prev => addMonths(prev, 1));
-      } else if (distance < -minSwipeDistance) {
-        setCurrentMonth(prev => subMonths(prev, 1));
-      }
-    }
-    touchStart.current = null;
-    touchEnd.current = null;
-  };
-
-  const onMouseLeave = () => {
-    isDragging.current = false;
-    touchStart.current = null;
-    touchEnd.current = null;
-    setIsTouching(false);
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -340,7 +303,7 @@ function App() {
               <Activity className="text-primary" size={24} />
             </div>
             <h1 className="text-xl font-semibold tracking-tight text-foreground/90">
-              Exercícios Físicos (Beta)
+              Exercícios Físicos
             </h1>
           </div>
           
@@ -369,46 +332,43 @@ function App() {
           </div>
         </header>
 
+        {/* Navegação Mês */}
+        <div className="flex items-center justify-between px-2">
+          <button 
+            onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+            className="p-2 hover:bg-secondary rounded-full transition-colors text-muted-foreground hover:text-foreground"
+          >
+            <ChevronLeft size={20} />
+          </button>
+          <h2 className="text-lg font-medium capitalize">
+            {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
+          </h2>
+          <button 
+            onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+            className="p-2 hover:bg-secondary rounded-full transition-colors text-muted-foreground hover:text-foreground"
+          >
+            <ChevronRight size={20} />
+          </button>
+        </div>
+
+        {/* Calendário */}
         <div 
-          ref={calendarRef}
-          style={{ touchAction: 'pan-y' }}
-          className={cn(
-            "space-y-4 select-none rounded-xl transition-colors p-2 -m-2",
-            isTouching ? "bg-primary/10 ring-2 ring-primary/20" : ""
-          )}
+          className="grid grid-cols-7 gap-2 touch-pan-y select-none"
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
           onMouseDown={onMouseDown}
           onMouseMove={onMouseMove}
           onMouseUp={onMouseUp}
           onMouseLeave={onMouseLeave}
         >
-          {/* Navegação Mês */}
-          <div className="flex items-center justify-between px-2">
-            <button 
-              onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-              className="p-2 hover:bg-secondary rounded-full transition-colors text-muted-foreground hover:text-foreground"
-            >
-              <ChevronLeft size={20} />
-            </button>
-            <h2 className="text-lg font-medium capitalize">
-              {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
-            </h2>
-            <button 
-              onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-              className="p-2 hover:bg-secondary rounded-full transition-colors text-muted-foreground hover:text-foreground"
-            >
-              <ChevronRight size={20} />
-            </button>
-          </div>
+          {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map(day => (
+            <div key={day} className="text-xs text-muted-foreground text-center font-medium py-2">
+              {day}
+            </div>
+          ))}
 
-          {/* Calendário */}
-          <div className="grid grid-cols-7 gap-2">
-            {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map(day => (
-              <div key={day} className="text-xs text-muted-foreground text-center font-medium py-2">
-                {day}
-              </div>
-            ))}
-
-            {eachDayOfInterval({
+          {eachDayOfInterval({
             start: startOfWeek(startOfMonth(currentMonth)),
             end: endOfWeek(endOfMonth(currentMonth))
           }).map((date, i) => {
@@ -455,7 +415,6 @@ function App() {
               </button>
             );
           })}
-          </div>
         </div>
       </div>
 
