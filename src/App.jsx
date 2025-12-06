@@ -275,7 +275,7 @@ function App() {
       el.removeEventListener('touchmove', handleTouchMove);
       el.removeEventListener('touchend', handleTouchEnd);
     };
-  }, []);
+  }, [loading]);
 
   // Handlers Mouse (Desktop) - Mantidos via React Props
   const onMouseDown = (e) => {
