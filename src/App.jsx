@@ -59,7 +59,7 @@ function App() {
   const touchStart = useRef(null);
   const touchEnd = useRef(null);
   const isDragging = useRef(false);
-  const minSwipeDistance = 50;
+  const minSwipeDistance = 30;
 
   // Gerenciar Sessão
   useEffect(() => {
@@ -235,11 +235,11 @@ function App() {
   // Handlers de Navegação Gestual
   const onTouchStart = (e) => {
     touchEnd.current = null;
-    touchStart.current = e.targetTouches[0].clientX;
+    touchStart.current = e.touches[0].clientX;
   };
 
   const onTouchMove = (e) => {
-    touchEnd.current = e.targetTouches[0].clientX;
+    touchEnd.current = e.touches[0].clientX;
   };
 
   const onTouchEnd = () => {
@@ -355,7 +355,7 @@ function App() {
 
         {/* Calendário */}
         <div 
-          className="grid grid-cols-7 gap-2 touch-pan-y select-none"
+          className="touch-pan-y select-none"
           onTouchStart={onTouchStart}
           onTouchMove={onTouchMove}
           onTouchEnd={onTouchEnd}
@@ -364,13 +364,14 @@ function App() {
           onMouseUp={onMouseUp}
           onMouseLeave={onMouseLeave}
         >
-          {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map(day => (
-            <div key={day} className="text-xs text-muted-foreground text-center font-medium py-2">
-              {day}
-            </div>
-          ))}
+          <div className="grid grid-cols-7 gap-2">
+            {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map(day => (
+              <div key={day} className="text-xs text-muted-foreground text-center font-medium py-2">
+                {day}
+              </div>
+            ))}
 
-          {eachDayOfInterval({
+            {eachDayOfInterval({
             start: startOfWeek(startOfMonth(currentMonth)),
             end: endOfWeek(endOfMonth(currentMonth))
           }).map((date, i) => {
@@ -417,6 +418,7 @@ function App() {
               </button>
             );
           })}
+          </div>
         </div>
       </div>
 
