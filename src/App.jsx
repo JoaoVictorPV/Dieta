@@ -59,7 +59,7 @@ function App() {
   const [touchStart, setTouchStart] = useState(null);
   const [touchEnd, setTouchEnd] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
-  const minSwipeDistance = 50;
+  const minSwipeDistance = 30;
 
   // Gerenciar Sessão
   useEffect(() => {
@@ -343,7 +343,10 @@ function App() {
         </header>
 
         <div 
-          className="space-y-4 touch-pan-y select-none"
+          className={cn(
+            "space-y-4 touch-pan-y select-none rounded-xl transition-colors p-2 -m-2",
+            (touchStart !== null || isDragging) ? "bg-primary/5" : ""
+          )}
           onTouchStart={onTouchStart}
           onTouchMove={onTouchMove}
           onTouchEnd={onTouchEnd}
