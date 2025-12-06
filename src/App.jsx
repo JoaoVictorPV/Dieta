@@ -55,6 +55,12 @@ function App() {
   });
   const [caloriesInput, setCaloriesInput] = useState('');
 
+  // Navegação por Gesto (Touch/Mouse)
+  const [touchStart, setTouchStart] = useState(null);
+  const [touchEnd, setTouchEnd] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const minSwipeDistance = 50;
+
   // Gerenciar Sessão
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -120,6 +126,12 @@ function App() {
         user_id: session.user.id
       }])
       .select();
+
+    if (error) {
+      console.error('Erro ao adicionar:', error);
+      alert('Erro ao adicionar exercício: ' + error.message);
+      return;
+    }
 
     if (data) {
       setExercises([...exercises, data[0]]);
@@ -220,6 +232,56 @@ function App() {
     return Object.values(dayData).reduce((acc, curr) => acc + (curr.calories || 0), 0);
   };
 
+  // Handlers de Navegação Gestual
+  const onTouchStart = (e) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const onTouchMove = (e) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    handleSwipe(distance);
+  };
+
+  const onMouseDown = (e) => {
+    setIsDragging(true);
+    setTouchEnd(null);
+    setTouchStart(e.clientX);
+  };
+
+  const onMouseMove = (e) => {
+    if (!isDragging) return;
+    setTouchEnd(e.clientX);
+  };
+
+  const onMouseUp = () => {
+    if (!isDragging) return;
+    setIsDragging(false);
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    handleSwipe(distance);
+  };
+
+  const onMouseLeave = () => {
+    setIsDragging(false);
+    setTouchStart(null);
+    setTouchEnd(null);
+  };
+
+  const handleSwipe = (distance) => {
+    if (distance > minSwipeDistance) {
+      setCurrentMonth(prev => addMonths(prev, 1));
+    }
+    if (distance < -minSwipeDistance) {
+      setCurrentMonth(prev => subMonths(prev, 1));
+    }
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -292,7 +354,16 @@ function App() {
         </div>
 
         {/* Calendário */}
-        <div className="grid grid-cols-7 gap-2">
+        <div 
+          className="grid grid-cols-7 gap-2 touch-pan-y select-none"
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+          onMouseDown={onMouseDown}
+          onMouseMove={onMouseMove}
+          onMouseUp={onMouseUp}
+          onMouseLeave={onMouseLeave}
+        >
           {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map(day => (
             <div key={day} className="text-xs text-muted-foreground text-center font-medium py-2">
               {day}
