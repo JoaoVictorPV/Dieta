@@ -269,6 +269,9 @@ function App() {
     el.addEventListener('touchstart', handleTouchStart, { passive: true });
     el.addEventListener('touchmove', handleTouchMove, { passive: true });
     el.addEventListener('touchend', handleTouchEnd);
+    
+    // DEBUG: Confirmação de carregamento
+    // alert("Calendário Pronto"); // Comentado para não incomodar se não for debug
 
     return () => {
       el.removeEventListener('touchstart', handleTouchStart);
@@ -337,7 +340,7 @@ function App() {
               <Activity className="text-primary" size={24} />
             </div>
             <h1 className="text-xl font-semibold tracking-tight text-foreground/90">
-              Exercícios Físicos
+              Exercícios Físicos (Beta)
             </h1>
           </div>
           
