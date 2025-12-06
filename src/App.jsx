@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { supabase } from './lib/supabase';
 import { Login } from './components/Login';
 import { 
@@ -56,10 +56,10 @@ function App() {
   const [caloriesInput, setCaloriesInput] = useState('');
 
   // Navegação por Gesto (Touch/Mouse)
-  const touchStart = useRef(null);
-  const touchEnd = useRef(null);
-  const isDragging = useRef(false);
-  const minSwipeDistance = 30;
+  const [touchStart, setTouchStart] = useState(null);
+  const [touchEnd, setTouchEnd] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const minSwipeDistance = 50;
 
   // Gerenciar Sessão
   useEffect(() => {
@@ -234,43 +234,51 @@ function App() {
 
   // Handlers de Navegação Gestual
   const onTouchStart = (e) => {
-    touchEnd.current = null;
-    touchStart.current = e.touches[0].clientX;
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
   };
 
   const onTouchMove = (e) => {
-    touchEnd.current = e.touches[0].clientX;
+    setTouchEnd(e.targetTouches[0].clientX);
   };
 
   const onTouchEnd = () => {
-    if (!touchStart.current || !touchEnd.current) return;
-    const distance = touchStart.current - touchEnd.current;
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
     handleSwipe(distance);
+    setTouchStart(null);
+    setTouchEnd(null);
   };
 
   const onMouseDown = (e) => {
-    isDragging.current = true;
-    touchEnd.current = null;
-    touchStart.current = e.clientX;
+    setTouchEnd(null);
+    setTouchStart(e.clientX);
+    setIsDragging(true);
   };
 
   const onMouseMove = (e) => {
-    if (!isDragging.current) return;
-    touchEnd.current = e.clientX;
+    if (isDragging) {
+      setTouchEnd(e.clientX);
+    }
   };
 
   const onMouseUp = () => {
-    if (!isDragging.current) return;
-    isDragging.current = false;
-    if (!touchStart.current || !touchEnd.current) return;
-    const distance = touchStart.current - touchEnd.current;
-    handleSwipe(distance);
+    if (!isDragging) return;
+    setIsDragging(false);
+    if (touchStart && touchEnd) {
+      const distance = touchStart - touchEnd;
+      handleSwipe(distance);
+    }
+    setTouchStart(null);
+    setTouchEnd(null);
   };
 
   const onMouseLeave = () => {
-    isDragging.current = false;
-    touchStart.current = null;
-    touchEnd.current = null;
+    if (isDragging) {
+      setIsDragging(false);
+      setTouchStart(null);
+      setTouchEnd(null);
+    }
   };
 
   const handleSwipe = (distance) => {
@@ -334,28 +342,8 @@ function App() {
           </div>
         </header>
 
-        {/* Navegação Mês */}
-        <div className="flex items-center justify-between px-2">
-          <button 
-            onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
-            className="p-2 hover:bg-secondary rounded-full transition-colors text-muted-foreground hover:text-foreground"
-          >
-            <ChevronLeft size={20} />
-          </button>
-          <h2 className="text-lg font-medium capitalize">
-            {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
-          </h2>
-          <button 
-            onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
-            className="p-2 hover:bg-secondary rounded-full transition-colors text-muted-foreground hover:text-foreground"
-          >
-            <ChevronRight size={20} />
-          </button>
-        </div>
-
-        {/* Calendário */}
         <div 
-          className="touch-pan-y select-none"
+          className="space-y-4 touch-pan-y select-none"
           onTouchStart={onTouchStart}
           onTouchMove={onTouchMove}
           onTouchEnd={onTouchEnd}
@@ -364,6 +352,26 @@ function App() {
           onMouseUp={onMouseUp}
           onMouseLeave={onMouseLeave}
         >
+          {/* Navegação Mês */}
+          <div className="flex items-center justify-between px-2">
+            <button 
+              onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+              className="p-2 hover:bg-secondary rounded-full transition-colors text-muted-foreground hover:text-foreground"
+            >
+              <ChevronLeft size={20} />
+            </button>
+            <h2 className="text-lg font-medium capitalize">
+              {format(currentMonth, 'MMMM yyyy', { locale: ptBR })}
+            </h2>
+            <button 
+              onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+              className="p-2 hover:bg-secondary rounded-full transition-colors text-muted-foreground hover:text-foreground"
+            >
+              <ChevronRight size={20} />
+            </button>
+          </div>
+
+          {/* Calendário */}
           <div className="grid grid-cols-7 gap-2">
             {['D', 'S', 'T', 'Q', 'Q', 'S', 'S'].map(day => (
               <div key={day} className="text-xs text-muted-foreground text-center font-medium py-2">
